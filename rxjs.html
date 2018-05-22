@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Document</title>
+</head>
+<body>
+    <div id="demo">
+        <div v-text="text"></div>
+        <div v-text="abc"></div>
+    </div>
+
+    <div id="demo2">
+        <div v-text="data1"></div>
+        <div v-text="data2"></div>
+    </div>
+    <script>
+        class Bif {
+            constructor(o){
+                this.$o=o;
+                this._data=o.data;
+                this.$el=document.querySelector(o.el);
+                
+                //1、视图模型数据变更后，代理到（对接或绑定到）观察者管道
+                Object.keys(o.data).forEach(key=>this._proxy(key));
+
+                //2、数据劫持，即创建观察者管道（由管道去绑定数据操作事件）
+                observer(o.data);
+
+                //3、绑定观察者事件（_update），当消息订阅器有通知时，会触发此事件
+                watch(this,this._render.bind(this),this._update.bind(this));
+            }
+            
+            //视图数据变更的代理
+            _proxy(key){
+                const self=this;
+                Object.defineProperty(self,key,{
+                    configurable:true,
+                    enumerable:true,
+                    get:function(){
+                        return self._data[key];
+                    },
+                    set:function(val){
+                        self._data[key]=val;
+                    }
+                })
+            }
+            
+            _update(){
+                console.log('trigger _update');
+                this._render.call(this);
+            }
+
+            //更新视图
+            _render(){
+                console.log('trigger _render');
+                this._bindText();
+            }
+            _bindText(){
+                let txtDom=this.$el.querySelectorAll('[v-text]');
+                let bindText;
+                for (let i = 0; i < txtDom.length; i++) {
+                    bindText=txtDom[i].getAttribute('v-text');
+                    let data=this._data[bindText];
+                    if (data) {
+                        txtDom[i].innerHTML=data;
+                    }
+                }
+            }
+        }
+        
+        //数据劫持，监控数据变化
+        function observer(value,callback){
+            Object.keys(value).forEach(
+                (key)=>defineReactive(value,key,value[key],callback)
+            )
+        }
+        function defineReactive(obj,key,val,callback){
+            const subscription=new Subscription();
+            Object.defineProperty(obj,key,{
+                enumerable: true,
+                configurable: true,
+                get:()=>{
+                    console.log('---- get')
+                    if (Subscription.target) {
+                        console.log('subscription.add')
+                        //将观察者加入消息订阅器中
+                        subscription.add(Subscription.target);
+
+                    }
+                    return val;
+                },
+                set: newVal=>{
+                    if (newVal===val) {
+                        return;
+                    }
+                    val=newVal;
+                    subscription.notify();
+                }
+            });
+        }
+        
+        //配置观察者事件
+        function watch(vm,load,callback){
+            Subscription.target=new Watcher(vm,callback);
+            return load();
+        }
+
+        //消息订阅器，有事件会通知所有观察者
+        class Subscription {
+            constructor(){
+                this.watcherList=[];
+            }
+
+            //添加观察者
+            add(watcher){
+                let i=this.watcherList.indexOf(watcher);
+                if(i>=0){
+                    return;
+                }
+
+                this.watcherList.push(watcher)
+            }
+            
+            //通知此消息订阅器的所有观察者
+            notify(){
+                this.watcherList.forEach((watcher)=>watcher.update())
+            }
+        }
+        Subscription.target = null;
+
+        //观察者
+        class Watcher{
+            constructor(vm,callback){
+                this.vm=vm;
+                this.callback=callback;
+            }
+
+            update(){
+                this.run();
+            }
+
+            run(){
+                this.callback.call(this.vm);
+            }
+        }
+
+        var demo=new Bif({
+            el:'#demo',
+            data:{
+                text:'hello world',
+                abc:'abc'
+            }
+        })
+
+        var demo2=new Bif({
+            el:'#demo2',
+            data:{
+                data1:'hello world2',
+                data2:'abc2'
+            }
+        })
+
+        setTimeout(function(){
+            demo.text='hello world Bif.'
+        },1000)
+
+        
+    </script>
+
+    
+
+</body>
+</html>
